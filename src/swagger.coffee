@@ -82,7 +82,10 @@ class SwaggerApi
     # The base path derived from url
     if response.basePath
       # support swagger 1.1, which has basePath
-      @basePath = response.basePath
+      if response.basePath.substring(0,4) == 'http'
+        @basePath = response.basePath
+      else
+        @basePath = url.resolve(@url, response.basePath)
     else if @url.indexOf('?') > 0
       @basePath = @url.substring(0, @url.lastIndexOf('?'))
     else
@@ -901,6 +904,40 @@ class PasswordAuthorization
   apply: (obj) ->
     obj.headers["Authorization"] = "Basic " + btoa(@username + ":" + @password)
 
+class OAuthAuthorization
+  type: null
+  consumerKey: null
+  consumerSecret: null
+
+  constructor: (type, consumerKey, consumerSecret) ->
+    @type = type
+    @consumerKey = consumerKey
+    @consumerSecret = consumerSecret
+
+  apply: (obj) ->
+    accessor =
+      consumerKey: @consumerKey
+      consumerSecret: @consumerSecret
+    message =
+      method: obj.method
+      action: obj.url
+      data: null
+      processData: false
+      parameters: []
+    if message.parameters and 0 < message.parameters.length and 0 < message.parameters[0].length
+      message.action = message.action + "?" + OAuth.formEncode(message.parameters)
+    if obj.body
+      message.processData = true
+      message.data = obj.body
+      obj.headers["Content-Type"] = "application/json"
+    else
+      obj.headers["Content-Type"] = "application/x-www-form-urlencoded"
+
+    OAuth.completeRequest(message, accessor)
+    authorizationHeader = OAuth.getAuthorizationHeader("", message.parameters)
+    obj.headers["Authorization"] = authorizationHeader
+    #obj.body = requestBody
+
 @SwaggerApi = SwaggerApi
 @SwaggerResource = SwaggerResource
 @SwaggerOperation = SwaggerOperation
@@ -908,5 +945,6 @@ class PasswordAuthorization
 @SwaggerModelProperty = SwaggerModelProperty
 @ApiKeyAuthorization = ApiKeyAuthorization
 @PasswordAuthorization = PasswordAuthorization
+@OAuthAuthorization = OAuthAuthorization
 
 @authorizations = new SwaggerAuthorizations()
